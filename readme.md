@@ -1,3 +1,12 @@
+> **This fork (branch `live-video-doorbell`)** brings PiPup up to date for Android 14 / Google TV (the original is
+> blocked by Play Protect) and adds live RTSP video with a poster frame, remote-button dismiss and a locked-down
+> API: an adb-only shared key (`Authorization: Bearer <key>`), a 2-minute cap and redacted logs.
+> It powers [doorbell-tv-popup](https://github.com/dapperdal/doorbell-tv-popup): the live Ring doorbell camera
+> on your TV. Original project: [rogro82/PiPup](https://github.com/rogro82/PiPup).
+>
+> Set the key: `adb shell content call --uri content://nl.rogro82.pipup.key --method set_key --arg <key>`
+> Video popups accept `"media": {"video": {"uri": "rtsp://...", "width": 640, "poster": "http://...jpg"}}`.
+
 # PiPup
 
 PiPup is an application that allows displaying user-defined custom notifications on Android TV.
