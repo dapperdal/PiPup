@@ -139,7 +139,7 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
-                        Log.e("PiPupVideo", "playback error: ${error.errorCodeName} ${error.message}")
+                        Log.e("PiPupVideo", "playback error: ${error.errorCodeName} ${PiPupService.redact(error.message)}")
                     }
                 })
                 playWhenReady = true
@@ -152,7 +152,7 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
             fun scheduleRetry(attempt: Int) {
                 mRetryHandler.postDelayed({
                     val player = mPlayer ?: return@postDelayed
-                    if (mFirstFrame || attempt > 4) return@postDelayed
+                    if (mFirstFrame || attempt > 3) return@postDelayed
                     Log.w("PiPupVideo", "no video after join, reconnecting (attempt $attempt)")
                     player.stop()
                     if (uri.scheme.equals("rtsp", ignoreCase = true)) {
@@ -162,7 +162,8 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
                     }
                     player.prepare()
                     scheduleRetry(attempt + 1)
-                }, 5000)
+                // A cold Ring camera can take ~11 s to send its first frame; reconnecting sooner kills that start
+                }, if (attempt == 1) 15000L else 8000L)
             }
             scheduleRetry(1)
         }

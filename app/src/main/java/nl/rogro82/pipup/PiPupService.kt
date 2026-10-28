@@ -19,6 +19,7 @@ import android.widget.FrameLayout
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoHTTPD.newFixedLengthResponse
 import java.io.File
+import java.security.MessageDigest
 
 
 class PiPupService : Service(), WebServer.Handler {
@@ -110,7 +111,7 @@ class PiPupService : Service(), WebServer.Handler {
     private fun createPopup(popup: PopupProps) {
         try {
 
-            Log.d(LOG_TAG, "Create popup: $popup")
+            Log.d(LOG_TAG, "Create popup: ${redact(popup)}")
 
             // remove current popup
 
@@ -125,7 +126,8 @@ class PiPupService : Service(), WebServer.Handler {
                 else -> object : FrameLayout(this) {
                     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
                         if (event.action == KeyEvent.ACTION_UP) {
-                            mHandler.post { removePopup(true) }
+                            // View.post, not mHandler: a popup arriving meanwhile clears mHandler's queue
+                            post { removePopup(true) }
                         }
                         return true
                     }
@@ -179,7 +181,7 @@ class PiPupService : Service(), WebServer.Handler {
 
             mHandler.postDelayed({
                 removePopup(true)
-            }, (popup.duration * 1000).toLong())
+            }, popup.duration.coerceIn(1, MAX_DURATION) * 1000L)
 
         } catch (ex: Throwable) {
             ex.printStackTrace()
@@ -188,6 +190,7 @@ class PiPupService : Service(), WebServer.Handler {
 
     override fun handleHttpRequest(session: NanoHTTPD.IHTTPSession?): NanoHTTPD.Response {
         return session?.let {
+            if (!isAuthorized(session)) return Unauthorized()
             when(session.method) {
                 NanoHTTPD.Method.POST -> {
 
@@ -276,13 +279,13 @@ class PiPupService : Service(), WebServer.Handler {
                                     else -> throw Exception("invalid content-type")
                                 }
 
-                                Log.d(LOG_TAG, "received popup: $popup")
+                                Log.d(LOG_TAG, "received popup: ${redact(popup)}")
 
                                 mHandler.post {
                                     createPopup(popup)
                                 }
 
-                                OK("$popup")
+                                OK("ok")
 
 
                             } catch (ex: Throwable) {
@@ -298,14 +301,29 @@ class PiPupService : Service(), WebServer.Handler {
         } ?: InvalidRequest()
     }
 
+    // If a token has been set (see MainActivity), every request must send "Authorization: Bearer <token>"
+    private fun isAuthorized(session: NanoHTTPD.IHTTPSession): Boolean {
+        val token = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_TOKEN, null)
+        if (token.isNullOrEmpty()) return true
+        val sent = session.headers["authorization"] ?: return false
+        return MessageDigest.isEqual(sent.toByteArray(), "Bearer $token".toByteArray())
+    }
+
     companion object {
         const val LOG_TAG = "PiPupService"
+
+        // Popups can carry stream URLs with a password in them (rtsp://user:pass@host): keep those out of logcat
+        fun redact(value: Any?): String = value.toString().replace(Regex("://[^/@\\s]+@"), "://***@")
         const val SERVER_PORT = 7979
+        const val MAX_DURATION = 120
+        const val PREFS = "pipup"
+        const val PREF_TOKEN = "token"
         const val ONGOING_NOTIFICATION_ID = 123
         const val MULTIPART_FORM_DATA = "multipart/form-data"
         const val APPLICATION_JSON = "application/json"
 
         fun OK(message: String? = null): NanoHTTPD.Response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", message)
+        fun Unauthorized(): NanoHTTPD.Response = newFixedLengthResponse(NanoHTTPD.Response.Status.UNAUTHORIZED, "text/plain", "unauthorized")
         fun InvalidRequest(message: String? = null): NanoHTTPD.Response = newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "text/plain", "invalid request: $message")
     }
 }
