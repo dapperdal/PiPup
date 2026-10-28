@@ -8,9 +8,10 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
-import android.support.v4.app.NotificationCompat
+import androidx.core.app.NotificationCompat
 import android.util.Log
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -33,7 +34,7 @@ class PiPupService : Service(), WebServer.Handler {
 
         val pendingIntent = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java), 0
+            Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
         )
 
         val mBuilder = NotificationCompat.Builder(this, "service_channel")
@@ -45,7 +46,11 @@ class PiPupService : Service(), WebServer.Handler {
             .setAutoCancel(false)
             .setOngoing(true)
 
-        startForeground(ONGOING_NOTIFICATION_ID, mBuilder.build())
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(ONGOING_NOTIFICATION_ID, mBuilder.build(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(ONGOING_NOTIFICATION_ID, mBuilder.build())
+        }
 
         mWebServer = WebServer(SERVER_PORT, this).apply {
             start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
@@ -115,9 +120,20 @@ class PiPupService : Service(), WebServer.Handler {
 
             mOverlay = when (val overlay = mOverlay) {
                 is FrameLayout -> overlay
-                else -> FrameLayout(this).apply {
+                // Any remote button closes the popup: the overlay takes key focus while it is shown, so the
+                // first press dismisses it instead of going to the app underneath.
+                else -> object : FrameLayout(this) {
+                    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+                        if (event.action == KeyEvent.ACTION_UP) {
+                            mHandler.post { removePopup(true) }
+                        }
+                        return true
+                    }
+                }.apply {
 
                     setPadding(20, 20, 20, 20)
+                    isFocusable = true
+                    isFocusableInTouchMode = true
 
                     val layoutFlags: Int = when {
                         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -128,12 +144,13 @@ class PiPupService : Service(), WebServer.Handler {
                         WindowManager.LayoutParams.MATCH_PARENT,
                         WindowManager.LayoutParams.MATCH_PARENT,
                         layoutFlags,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                         PixelFormat.TRANSLUCENT
                     )
 
                     val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
                     wm.addView(this, params)
+                    requestFocus()
                 }
             }.also {
 
@@ -269,7 +286,7 @@ class PiPupService : Service(), WebServer.Handler {
 
 
                             } catch (ex: Throwable) {
-                                Log.e(LOG_TAG, ex.message)
+                                Log.e(LOG_TAG, ex.message ?: "error")
                                 InvalidRequest(ex.message)
                             }
                         }
