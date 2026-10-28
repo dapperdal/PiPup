@@ -301,7 +301,7 @@ class PiPupService : Service(), WebServer.Handler {
         } ?: InvalidRequest()
     }
 
-    // If a token has been set (see MainActivity), every request must send "Authorization: Bearer <token>"
+    // If a key has been set (see KeyProvider), every request must send "Authorization: Bearer <token>"
     private fun isAuthorized(session: NanoHTTPD.IHTTPSession): Boolean {
         val token = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_TOKEN, null)
         if (token.isNullOrEmpty()) return true

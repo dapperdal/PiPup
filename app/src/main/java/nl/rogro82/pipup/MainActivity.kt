@@ -18,7 +18,6 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.widget.TextView
 import nl.rogro82.pipup.Utils.getIpAddress
@@ -29,19 +28,6 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Set the shared secret once over adb:
-        //   adb shell am start -n nl.rogro82.pipup/.MainActivity --es token <secret>
-        // After that, requests without "Authorization: Bearer <secret>" are refused. Changing or clearing it (empty
-        // value) needs the current one too (--es old_token <current>), so another app on the TV can't swap it.
-        intent.getStringExtra(PiPupService.PREF_TOKEN)?.let { newToken ->
-            val prefs = getSharedPreferences(PiPupService.PREFS, MODE_PRIVATE)
-            val current = prefs.getString(PiPupService.PREF_TOKEN, null)
-            if (current.isNullOrEmpty() || intent.getStringExtra("old_token") == current) {
-                prefs.edit().putString(PiPupService.PREF_TOKEN, newToken.trim()).apply()
-            } else {
-                Log.w(PiPupService.LOG_TAG, "token not changed: old_token missing or wrong")
-            }
-        }
 
         // start service in foreground
 
